@@ -42,20 +42,16 @@ class ArrayEnv(gym.Env):
         self, n_rows: int, n_cols: int, targets, config: Config, seed=0
     ) -> None:
         # State
-        self._grid = np.array(
-            [[0 for _ in range(n_cols)] for __ in range(n_rows)], dtype=np.int8
-        )
-        self._tgrid = np.array(
-            [[0 for _ in range(n_cols)] for __ in range(n_rows)], dtype=np.int8
-        )
+        self._grid = np.zeros((n_rows, n_cols), dtype=np.uint8)
+        self._tar_grid = np.zeros((n_rows, n_cols), dtype=np.uint8)
         for tr, tc in targets:
-            self._tgrid[tr][tc] = 1
-        self._target_rewards = np.copy(self._tgrid)
+            self._tar_grid[tr][tc] = 1
+        self._mt_grid = np.zeros((n_rows, n_cols), dtype=np.uint8)
 
+        # self._target_rewards = np.copy(self._tgrid)
         self._targets = set(targets)
         self._mt_pos = np.array((0, 0))
         self._mt_atom = False
-        self._mt_atom_obs = 0
         self._move_len = 0
         self._total_time = 0
 
@@ -64,38 +60,35 @@ class ArrayEnv(gym.Env):
         self.n_rows = n_rows
         self.n_cols = n_cols
         self.config = config
+        self.np_random = np.random.default_rng()
 
         # Observations
-        obs_grid = spaces.Box(low=0, high=1, shape=(n_rows, n_cols), dtype=np.int8)
-        obs_tgrid = spaces.Box(low=0, high=1, shape=(n_rows, n_cols), dtype=np.int8)
-        obs_mt_pos = spaces.MultiDiscrete([n_rows, n_cols])
-        obs_mt_atom = spaces.Discrete(2)
-        self.observation_space = spaces.Dict(
-            {
-                "grid": obs_grid,
-                "tar_grid": obs_tgrid,
-                "mt_position": obs_mt_pos,
-                "mt_atom": obs_mt_atom,
-            }
+        self.observation_space = spaces.Box(
+            low=0,
+            high=255,
+            shape=(3, self.n_rows, self.n_cols),
+            dtype="uint8",
         )
 
         # Actions
-        # self.action_space = spaces.MultiDiscrete([6, max(n_rows, n_cols)])
         self.action_space = spaces.Discrete(6)
 
-        self.np_random = np.random.default_rng()
         self.reset()
 
-    def _reset_target_rewards(self):
-        self._target_rewards = np.copy(self._tgrid) * self.config.TargetRelease
+    # def _reset_target_rewards(self):
+    #     self._target_rewards = np.copy(self._tgrid) * self.config.TargetRelease
+
+    def _get_obs(self):
+        return np.array((self._grid, self._tar_grid, self._mt_grid))
 
     def _fill_grid(self):
+        fill_prob = self.config.FillFraction
         filled = 0
         while filled < len(self._all_targets):
             self._targets = set(self._all_targets)
+            self._grid = np.zeros(self._grid.shape, dtype=np.uint8)
+
             filled = 0
-            self._grid = np.zeros(self._grid.shape, dtype=np.int8)
-            fill_prob = self.config.FillFraction
             for i in range(self.n_rows):
                 for j in range(self.n_cols):
                     if self.np_random.random() < fill_prob:
@@ -107,51 +100,56 @@ class ArrayEnv(gym.Env):
         # super().reset(seed=seed, options=options)
 
         # Reset and fill grid
-        self._reset_target_rewards()
+        # self._reset_target_rewards()
         self._fill_grid()
 
         # Reset MT
         mt_r = self.np_random.integers(0, self.n_rows)
         mt_c = self.np_random.integers(0, self.n_cols)
         self._mt_pos = np.array((mt_r, mt_c))
+        self._mt_grid = np.zeros(self._grid.shape, dtype=np.uint8)
+        self._mt_grid[(mt_r, mt_c)] = 1
+
         self._mt_atom = False
-        self._mt_atom_obs = 0
         self._move_len = 0
         self._total_time = 0
 
-        return {
-            "grid": self._grid,
-            "tar_grid": self._tgrid,
-            "mt_position": self._mt_pos,
-            "mt_atom": 1 * self._mt_atom,
-        }
+        return self._get_obs()
 
     def render(self, *args):
+        print('-' * 5 * self.n_cols)
+
+        mr, mc = self._mt_pos
         for r in range(self.n_rows):
             for c in range(self.n_cols):
+                is_tar = self._tar_grid[r][c] == 1
+
+                print(" [" if is_tar else "  ", end="")
                 print(self._grid[r][c], end="")
-                print("*" if self._tgrid[r][c] == 1 else " ", end=" ")
+                print("] " if is_tar else "  ", end="")
             print()
-        print(
-            f"MT at {self._mt_pos}. Atom in: {self._mt_atom}, obs: {self._mt_atom_obs}"
-        )
-        print(f"Remaining targets: {self._targets}")
+            if r == mr:
+                print("     " * mc + f"  {'⦽' if self._mt_atom else '↑'}  " + "     " * (self.n_cols - mc))
+            else:
+                print()
+
+        print('-' * 5 * self.n_cols)
+
 
     def _check_cell(self, pos):
         r, c = pos
         return r > -1 and c > -1 and r < self.n_rows and c < self.n_cols
 
-    def _clip_move(self, pos):
-        return np.clip(pos, (0, 0), (self.n_rows, self.n_cols))
+    # def _clip_move(self, pos):
+    #     return np.clip(pos, (0, 0), (self.n_rows, self.n_cols))
 
     def _step(self, action):
-        dir = action
         pos = tuple(self._mt_pos)
         grid = self._grid
         config = self.config
 
         # Tweezer Pickup
-        if dir == 4:
+        if action == 4:
             if self._mt_atom:
                 # Duplicate pick up
                 return config.DuplicatePickUp, True
@@ -160,6 +158,7 @@ class ArrayEnv(gym.Env):
                 return config.EmptyPickUp, True
 
             self._mt_atom = True
+            self._mt_grid[pos] = 2
             grid[pos] = 0
             self._total_time += config.TweezerTime
 
@@ -169,7 +168,7 @@ class ArrayEnv(gym.Env):
             return config.ReservPickUp, False
 
         # Tweezer Release
-        if dir == 5:
+        if action == 5:
             if not self._mt_atom:
                 # Empty release
                 return config.EmptyRelease, True
@@ -178,35 +177,37 @@ class ArrayEnv(gym.Env):
                 return config.DuplicateRelease, True
 
             self._mt_atom = False
+            self._mt_grid = 1
             grid[pos] = 1
             self._total_time += config.TweezerTime
 
             if pos in self._targets:
                 self._targets.discard(pos)
-                temp = self._target_rewards[pos]
-                self._target_rewards[pos] *= 0
-                return temp, False
+                return config.TargetRelease, False
+                # temp = self._target_rewards[pos]
+                # self._target_rewards[pos] *= 0
             return config.ReservRelease, False
 
         # Movement
-        pos = self._mt_pos
-        diff = ACTION_TO_DIFF[dir]
-        reward = 0
-        for _ in range(1):
-            if not self._check_cell(pos + diff):
-                break
-            self._move_len += 1
+        diff = ACTION_TO_DIFF[action]
+        new_pos = tuple(self._mt_pos + diff)
+        if not self._check_cell(new_pos):
+            return 0, False
 
-            reward -= self.config.GridTime * self.config.TimeMultiplier
-            self._total_time += self.config.GridTime
+        self._move_len += 1
+        self._total_time += self.config.GridTime
 
-            pos += diff
-            if self._mt_atom and grid[tuple(pos)] == 1:
-                # Collision
-                reward += self.config.CollisionLoss
-                grid[pos] = 0
-                reward += self.config.MTCollLoss if self._mt_atom else 0
-                self._mt_atom = False
+        reward = -1 * self.config.GridTime * self.config.TimeMultiplier
+        if self._mt_atom and grid[new_pos] == 1:
+            # Collision
+            grid[new_pos] = 0
+            reward += self.config.CollisionLoss
+            reward += self.config.MTCollLoss if self._mt_atom else 0
+            self._mt_atom = False
+
+        self._mt_pos += diff
+        self._mt_grid[pos] = 0
+        self._mt_grid[new_pos] = 2 if self._mt_atom else 1
 
         return reward, False
 
@@ -214,6 +215,7 @@ class ArrayEnv(gym.Env):
         return len(self._all_targets)  # - self._total_time * self.config.TimeMultiplier
 
     def step(self, action):
+        print("UDLRAB"[action])
         term, trunc, reward = False, False, 0
         reward, stop = self._step(action)
 
@@ -223,15 +225,9 @@ class ArrayEnv(gym.Env):
 
         if self.config.Render:
             self.render()
-            print(self._targets)
 
         return (
-            {
-                "grid": self._grid,
-                "tar_grid": self._tgrid,
-                "mt_position": self._mt_pos,
-                "mt_atom": 1 * self._mt_atom,
-            },
+            self._get_obs(),
             reward - self.config.DefaultPenalty,
             term or trunc,
             {},
