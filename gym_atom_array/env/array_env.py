@@ -67,7 +67,7 @@ class ArrayEnv(gym.Env):
             low=0,
             high=255,
             shape=(3, self.n_rows, self.n_cols),
-            dtype="uint8",
+            dtype=np.uint8,
         )
 
         # Actions
@@ -177,7 +177,7 @@ class ArrayEnv(gym.Env):
                 return config.DuplicateRelease, True
 
             self._mt_atom = False
-            self._mt_grid = 1
+            self._mt_grid[pos] = 1
             grid[pos] = 1
             self._total_time += config.TweezerTime
 
