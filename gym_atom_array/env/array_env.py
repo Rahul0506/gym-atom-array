@@ -79,8 +79,6 @@ class ArrayEnv(gym.Env):
     #     self._target_rewards = np.copy(self._tgrid) * self.config.TargetRelease
 
     def _get_obs(self):
-        return np.array((self._grid, self._tar_grid, self._mt_grid))
-
     def _fill_grid(self):
         fill_prob = self.config.FillFraction
         filled = 0
@@ -215,7 +213,6 @@ class ArrayEnv(gym.Env):
         return len(self._all_targets)  # - self._total_time * self.config.TimeMultiplier
 
     def step(self, action):
-        print("UDLRAB"[action])
         term, trunc, reward = False, False, 0
         reward, stop = self._step(action)
 
@@ -224,6 +221,7 @@ class ArrayEnv(gym.Env):
             reward += self._terminal_reward()
 
         if self.config.Render:
+            print("UDLRAB"[action])
             self.render()
 
         return (
