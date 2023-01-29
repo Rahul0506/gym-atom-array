@@ -18,8 +18,7 @@ class Config:
     TweezerTime: int = 50
 
     # Rewards
-    TimeMultiplier: float = 0.1
-    DefaultPenalty: float = 0.1
+    DefaultPenalty: float= 0
 
     TargetRelease: float = 0  # Release into target
     ReservRelease: float = 0  # Release into reserve
@@ -195,14 +194,14 @@ class ArrayEnv(gym.Env):
             return 0, False
 
         self._move_len += 1
-        self._total_time += self.config.GridTime
+        self._total_time += config.GridTime
 
-        reward = -1 * self.config.GridTime * self.config.TimeMultiplier
+        reward = 0
         if self._mt_atom and grid[new_pos] == 1:
             # Collision
             grid[new_pos] = 0
-            reward += self.config.CollisionLoss
-            reward += self.config.MTCollLoss if self._mt_atom else 0
+            reward += config.CollisionLoss
+            reward += config.MTCollLoss if self._mt_atom else 0
             self._mt_atom = False
 
         self._mt_pos += diff
@@ -212,15 +211,16 @@ class ArrayEnv(gym.Env):
         return reward, False
 
     def _terminal_reward(self):
-        return len(self._all_targets)  # - self._total_time * self.config.TimeMultiplier
+        return len(self._all_targets) ** 2
 
     def step(self, action):
         term, trunc, reward = False, False, 0
-        reward, stop = self._step(action)
+        reward, trunc = self._step(action)
+        reward += self.config.DefaultPenalty
 
         if len(self._targets) == 0:
             term = True
-            reward += self._terminal_reward()
+            reward = self._terminal_reward()
 
         if self.config.Render:
             print("UDLRAB"[action])
@@ -228,7 +228,7 @@ class ArrayEnv(gym.Env):
 
         return (
             self._get_obs(),
-            reward - self.config.DefaultPenalty,
+            reward,
             term or trunc,
             {},
         )
