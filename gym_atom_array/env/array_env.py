@@ -11,6 +11,7 @@ ACTION_TO_DIFF = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 @dataclass
 class Config:
     Render: bool = False
+    EarlyTerm: bool = False
 
     # Environment Parameters
     FillFraction: float = 0.5
@@ -236,7 +237,7 @@ class ArrayEnv(gym.Env):
         return (
             self._get_obs(),
             reward,
-            term or trunc,
+            term or (trunc and self.config.EarlyTerm),
             {},
         )
 
