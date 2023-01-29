@@ -3,6 +3,7 @@ import gym.spaces as spaces
 import numpy as np
 
 from dataclasses import dataclass
+from inspect import signature
 
 ACTION_TO_DIFF = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
@@ -34,7 +35,13 @@ class Config:
 
     RePickUp: float = 0  # Pick up an atom that was just released
     UndoMove: float = 0  # Current move undoes the previous move
-
+    
+    @classmethod
+    def from_dict(cls, val_dict):
+        filtered = {
+            k: v for k, v in val_dict.items() if k in signature(cls).parameters
+        }
+        return cls(**filtered)
 
 class ArrayEnv(gym.Env):
     def __init__(
