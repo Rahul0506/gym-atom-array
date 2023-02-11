@@ -66,7 +66,7 @@ class ArrayEnv(gym.Env):
         self.n_rows = n_rows
         self.n_cols = n_cols
         self.config = config
-        self.np_random = np.random.default_rng()
+        self.np_random = np.random.default_rng(seed)
 
         # Observations
         self.observation_space = spaces.Box(
