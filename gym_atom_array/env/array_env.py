@@ -20,7 +20,7 @@ class Config:
     TweezerTime: int = 50
 
     # Rewards
-    DefaultPenalty: float= 0
+    DefaultPenalty: float = 0
 
     TargetRelease: float = 0  # Release into target
     ReservRelease: float = 0  # Release into reserve
@@ -36,13 +36,12 @@ class Config:
 
     RePickUp: float = 0  # Pick up an atom that was just released
     UndoMove: float = 0  # Current move undoes the previous move
-    
+
     @classmethod
     def from_dict(cls, val_dict):
-        filtered = {
-            k: v for k, v in val_dict.items() if k in signature(cls).parameters
-        }
+        filtered = {k: v for k, v in val_dict.items() if k in signature(cls).parameters}
         return cls(**filtered)
+
 
 class ArrayEnv(gym.Env):
     def __init__(
@@ -82,8 +81,8 @@ class ArrayEnv(gym.Env):
 
         self.reset()
 
-    # def _reset_target_rewards(self):
-    #     self._target_rewards = np.copy(self._tgrid) * self.config.TargetRelease
+    def _reset_target_rewards(self):
+        self._target_rewards = np.copy(self._tar_grid) * self.config.TargetRelease
 
     def _get_obs(self):
         return np.array((self._grid, self._tar_grid, self._mt_grid))
@@ -107,7 +106,7 @@ class ArrayEnv(gym.Env):
         # super().reset(seed=seed, options=options)
 
         # Reset and fill grid
-        # self._reset_target_rewards()
+        self._reset_target_rewards()
         self._fill_grid()
 
         # Reset MT
@@ -124,7 +123,7 @@ class ArrayEnv(gym.Env):
         return self._get_obs()
 
     def render(self, *args):
-        print('-' * 5 * self.n_cols)
+        print("-" * 5 * self.n_cols)
 
         mr, mc = self._mt_pos
         for r in range(self.n_rows):
@@ -136,19 +135,19 @@ class ArrayEnv(gym.Env):
                 print("] " if is_tar else "  ", end="")
             print()
             if r == mr:
-                print("     " * mc + f"  {'⦽' if self._mt_atom else '↑'}  " + "     " * (self.n_cols - mc))
+                # fmt: off
+                print(
+                    "     " * mc + f"  {'⦽' if self._mt_atom else '↑'}  " + "     " * (self.n_cols - mc)
+                )
+                # fmt: on
             else:
                 print()
 
-        print('-' * 5 * self.n_cols)
-
+        print("-" * 5 * self.n_cols)
 
     def _check_cell(self, pos):
         r, c = pos
         return r > -1 and c > -1 and r < self.n_rows and c < self.n_cols
-
-    # def _clip_move(self, pos):
-    #     return np.clip(pos, (0, 0), (self.n_rows, self.n_cols))
 
     def _step(self, action):
         pos = tuple(self._mt_pos)
@@ -190,9 +189,9 @@ class ArrayEnv(gym.Env):
 
             if pos in self._targets:
                 self._targets.discard(pos)
-                return config.TargetRelease, False
-                # temp = self._target_rewards[pos]
-                # self._target_rewards[pos] *= 0
+                temp = self._target_rewards[pos]
+                self._target_rewards[pos] *= 0
+                return temp, False
             return config.ReservRelease, False
 
         # Movement
@@ -242,6 +241,33 @@ class ArrayEnv(gym.Env):
         )
 
 
+def get_action_mask(obs):
+    grid, _, mt_grid = obs
+    n, m = grid.shape
+
+    mt_r, mt_c, has_atom = -1, -1, False
+    for r in range(n):
+        for c in range(m):
+            if mt_grid[r][c] != 0:
+                mt_r, mt_c = r, c
+                has_atom = mt_grid[r][c] == 2
+                break
+
+    mask = [True for _ in range(6)]  # UDLRAB
+    if mt_r == 0 or (has_atom and grid[mt_r - 1][mt_c] == 1):
+        mask[0] = False
+    if mt_r == n - 1 or (has_atom and grid[mt_r + 1][mt_c] == 1):
+        mask[1] = False
+    if mt_c == 0 or (has_atom and grid[mt_r][mt_c - 1] == 1):
+        mask[2] = False
+    if mt_c == m - 1 or (has_atom and grid[mt_r][mt_c + 1] == 1):
+        mask[3] = False
+    mask[4] = not has_atom
+    mask[5] = has_atom
+
+    return mask
+
+
 if __name__ == "__main__":
     small_grid = [
         (1, 1),
@@ -251,23 +277,3 @@ if __name__ == "__main__":
     config = Config(Render=True)
     env = ArrayEnv(5, 5, small_grid, config)
     env.render()
-    while True:
-        while True:
-            try:
-                inp = int(input())
-                if inp in range(5):
-                    print("Dir: ", inp)
-                    break
-            except Exception as e:
-                pass
-        while True:
-            try:
-                delt = int(input())
-                print("Delta: ", delt)
-                break
-            except Exception as e:
-                pass
-        act = (inp, delt)
-        _, _, term, trunk, _ = env.step(act)
-        if term or trunk:
-            break
