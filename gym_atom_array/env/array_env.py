@@ -12,6 +12,7 @@ ACTION_TO_DIFF = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 class Config:
     Render: bool = False
     EarlyTerm: bool = False
+    OnlyMovingPenalty: bool = False
 
     # Environment Parameters
     FillFraction: float = 0.5
@@ -223,7 +224,11 @@ class ArrayEnv(gym.Env):
     def step(self, action):
         term, trunc, reward = False, False, 0
         reward, trunc = self._step(action)
-        reward += self.config.DefaultPenalty
+
+        if self.config.OnlyMovingPenalty:
+            reward += self.config.DefaultPenalty if self._mt_atom else 0
+        else:
+            reward += self.config.DefaultPenalty
 
         if len(self._targets) == 0:
             term = True
