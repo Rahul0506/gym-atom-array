@@ -219,7 +219,7 @@ class ArrayEnv(gym.Env):
         return reward, False
 
     def _terminal_reward(self):
-        return len(self._all_targets) ** 2
+        return len(self._all_targets) * self.config.TargetRelease
 
     def step(self, action):
         term, trunc, reward = False, False, 0
